@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNU重型封闭钢芯辊 - 制造仿真</title>
+<meta name="description" content="ChinaCNU Steel - 重型封闭钢芯辊制造工艺仿真动画">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔩</text></svg>">
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body,#root{height:100%}body{background:#070710}@keyframes hg{0%,100%{opacity:.5}50%{opacity:1}}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useCallback } = React;
+
+const COLORS = [
+  { name: "中国红", hex: "#cc2222", hi: "#e74c3c", lo: "#8b1a10", cap: "#b71c1c" },
+  { name: "宝石蓝", hex: "#1565c0", hi: "#2196f3", lo: "#0d47a1", cap: "#1256a0" },
+  { name: "工程黄", hex: "#f9a825", hi: "#fdd835", lo: "#c68400", cap: "#d69a00" },
+  { name: "森林绿", hex: "#2e7d32", hi: "#43a047", lo: "#1b5e20", cap: "#256428" },
+  { name: "石墨灰", hex: "#555555", hi: "#757575", lo: "#333333", cap: "#444444" },
+  { name: "橙色", hex: "#e65100", hi: "#ff7043", lo: "#ac3900", cap: "#bf4400" },
+];
+
+const STEPS = [
+  { label: "卷半壳", info: "① 热轧钢板通过卷板机分别卷成两个半圆壳体（Ø1.5m）" },
+  { label: "放左板", info: "② 将第一块 Ø1.5m 密封圆板放在工位左侧" },
+  { label: "放钢卷", info: "③ 行车将 Ø1m PPGI 钢卷吊放到工位中心（低于圆板）" },
+  { label: "扣上壳", info: "④ 行车吊上半圆壳从上方扣合到钢卷上方" },
+  { label: "扣下壳", info: "⑤ 行车吊下半圆壳从下方扣合，与上壳对齐" },
+  { label: "焊纵缝", info: "⑥ 焊接机器人焊接上下两条纵向对接缝" },
+  { label: "放右板", info: "⑦ 行车吊装右侧 Ø1.5m 端盖圆板" },
+  { label: "焊端盖", info: "⑧ 焊接机器人对两侧端盖进行全周环缝焊接" },
+  { label: "选色喷漆", info: "⑨ 选择颜色，对辊体进行整体喷涂" },
+  { label: "完成", info: "✅ CNU重型封闭钢芯辊制造完成！" },
+];
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+function anim(from,to,dur,fn,cancel){return new Promise(res=>{const s=performance.now();(function tick(now){if(cancel&&cancel()){res();return}const t=Math.min((now-s)/dur,1);fn(from+(to-from)*ease(t));t<1?requestAnimationFrame(tick):res()})(performance.now())})}
+function multi(pairs,dur,cancel){return new Promise(res=>{const s=performance.now();(function tick(now){if(cancel&&cancel()){res();return}const t=Math.min((now-s)/dur,1);const e=ease(t);pairs.forEach(function(p){p[2](p[0]+(p[1]-p[0])*e)});t<1?requestAnimationFrame(tick):res()})(performance.now())})}
+
+function App(){
+  const[step,setStep]=useState(-1);
+  const[busy,setBusy]=useState(false);
+  const[paintColor,setPaintColor]=useState(0);
+  const[s1Op,setS1Op]=useState(0);
+  const[plateArc,setPlateArc]=useState(0);
+  const[rollAng,setRollAng]=useState(0);
+  const[rollLabel,setRollLabel]=useState("");
+  const[s2Op,setS2Op]=useState(0);
+  const[lCapOp,setLCapOp]=useState(0);
+  const[lCapX,setLCapX]=useState(-100);
+  const[coilOp,setCoilOp]=useState(0);
+  const[coilY,setCoilY]=useState(-100);
+  const[craneOp,setCraneOp]=useState(0);
+  const[craneY,setCraneY]=useState(0);
+  const[topShOp,setTopShOp]=useState(0);
+  const[topShY,setTopShY]=useState(-120);
+  const[btmShOp,setBtmShOp]=useState(0);
+  const[btmShY,setBtmShY]=useState(120);
+  const[seamOp,setSeamOp]=useState(0);
+  const[rCapOp,setRCapOp]=useState(0);
+  const[rCapX,setRCapX]=useState(100);
+  const[capWeldOp,setCapWeldOp]=useState(0);
+  const[sparkPos,setSparkPos]=useState({x:0,y:0});
+  const[sparkOp,setSparkOp]=useState(0);
+  const[flashOn,setFlashOn]=useState(false);
+  const[robotOp,setRobotOp]=useState(0);
+  const[armRot,setArmRot]=useState(0);
+  const[paintOp,setPaintOp]=useState(0);
+  const[sprayerOp,setSprayerOp]=useState(0);
+  const[sprayOn,setSprayOn]=useState(false);
+  const[dimOp,setDimOp]=useState(0);
+  const[showPicker,setShowPicker]=useState(false);
+  const cancelRef=useRef(false);
+  const cc=()=>cancelRef.current;
+  const CX=560,CY=300,capR=112,coilR=72,bodyW=200,capW=18;
+  const LL=CX-bodyW/2,RR=CX+bodyW/2;
+  const col=COLORS[paintColor];
+  const bolts=[-90,-65,-40,-15,15,40,65,90];
+
+  const fullReset=useCallback(()=>{
+    cancelRef.current=true;
+    setTimeout(()=>{
+      setStep(-1);setBusy(false);setS1Op(0);setPlateArc(0);setRollAng(0);setRollLabel("");
+      setS2Op(0);setLCapOp(0);setLCapX(-100);setCoilOp(0);setCoilY(-100);
+      setCraneOp(0);setCraneY(0);setTopShOp(0);setTopShY(-120);
+      setBtmShOp(0);setBtmShY(120);setSeamOp(0);setRCapOp(0);setRCapX(100);
+      setCapWeldOp(0);setSparkOp(0);setFlashOn(false);setRobotOp(0);setArmRot(0);
+      setPaintOp(0);setSprayerOp(0);setSprayOn(false);setDimOp(0);setShowPicker(false);
+      cancelRef.current=false;
+    },120);
+  },[]);
+
+  async function doWeld(points,setLineOp){
+    await anim(0,1,300,setRobotOp,cc);if(cc())return;
+    if(setLineOp)setLineOp(0.6);setSparkOp(1);
+    for(var i=0;i<points.length;i++){var p=points[i];if(cc())return;
+      setSparkPos(p);setArmRot((p.y-CY)*0.05);
+      setFlashOn(true);await sleep(45);setFlashOn(false);await sleep(65);
+      setFlashOn(true);await sleep(35);setFlashOn(false);await sleep(95);
+    }
+    setSparkOp(0);setArmRot(0);
+    if(setLineOp)await anim(0.6,0.1,350,setLineOp,cc);
+    await anim(1,0,300,setRobotOp,cc);
+  }
+
+  const nextStep=useCallback(async()=>{
+    if(busy)return;const next=step+1;if(next>=STEPS.length)return;
+    setBusy(true);setStep(next);const lbl=STEPS[next].label;
+    if(lbl==="卷半壳"){
+      setS1Op(1);setS2Op(0);setRollLabel("卷制第 1 片半壳...");
+      const t0=performance.now();
+      await new Promise(res=>{(function tick(now){if(cancelRef.current){res();return}const t=Math.min((now-t0)/1800,1);setPlateArc(ease(t)*0.5);setRollAng((now-t0)*0.3);t<1?requestAnimationFrame(tick):res()})(performance.now())});
+      if(cc())return;await sleep(300);
+      setRollLabel("卷制第 2 片半壳...");setPlateArc(0);await sleep(200);
+      const t1=performance.now();
+      await new Promise(res=>{(function tick(now){if(cancelRef.current){res();return}const t=Math.min((now-t1)/1800,1);setPlateArc(ease(t)*0.5);setRollAng((now-t1)*0.3);t<1?requestAnimationFrame(tick):res()})(performance.now())});
+      if(cc())return;setRollLabel("✓ 两片半壳准备就绪");await sleep(500);
+      await anim(1,0,400,setS1Op,cc);setS2Op(1);
+    }else if(lbl==="放左板"){setLCapOp(1);await anim(-100,0,800,setLCapX,cc);
+    }else if(lbl==="放钢卷"){setCraneOp(1);setCoilOp(1);setCraneY(-100);await multi([[-100,0,setCoilY],[-100,0,setCraneY]],1000,cc);await sleep(150);await anim(1,0,300,setCraneOp,cc);
+    }else if(lbl==="扣上壳"){setTopShOp(1);await anim(-120,0,900,setTopShY,cc);
+    }else if(lbl==="扣下壳"){setBtmShOp(1);await anim(120,0,900,setBtmShY,cc);
+    }else if(lbl==="焊纵缝"){await doWeld([{x:CX-30,y:CY-coilR-2},{x:CX,y:CY-coilR-2},{x:CX+30,y:CY-coilR-2},{x:CX-30,y:CY+coilR+2},{x:CX,y:CY+coilR+2},{x:CX+30,y:CY+coilR+2}],setSeamOp);
+    }else if(lbl==="放右板"){setCraneOp(1);setRCapOp(1);setCraneY(-100);setRCapX(100);await multi([[100,0,setRCapX],[-100,0,setCraneY]],900,cc);await sleep(150);await anim(1,0,300,setCraneOp,cc);
+    }else if(lbl==="焊端盖"){await doWeld([{x:LL+capW,y:CY-85},{x:LL+capW,y:CY-45},{x:LL+capW,y:CY},{x:LL+capW,y:CY+45},{x:LL+capW,y:CY+85},{x:RR-capW,y:CY-85},{x:RR-capW,y:CY-45},{x:RR-capW,y:CY},{x:RR-capW,y:CY+45},{x:RR-capW,y:CY+85}],setCapWeldOp);
+    }else if(lbl==="选色喷漆"){setShowPicker(true);setBusy(false);return;
+    }else if(lbl==="完成"){setShowPicker(false);
+      await anim(0,1,300,setSprayerOp,cc);
+      for(var i=0;i<10;i++){if(cc())return;setSprayOn(true);await sleep(80);setSprayOn(false);await sleep(50)}
+      await anim(0,1,1200,setPaintOp,cc);await sleep(200);await anim(1,0,300,setSprayerOp,cc);await sleep(300);
+      await anim(0,1,600,setDimOp,cc);
+      for(var j=0;j<3;j++){if(cc())return;await anim(1,.75,200,setPaintOp,cc);await anim(.75,1,200,setPaintOp,cc)}
+    }
+    setBusy(false);
+  },[step,busy]);
+
+  const info=step>=0?STEPS[step].info:"点击「下一步」逐步演示 CNU 重型封闭钢芯辊制造流程";
+  const isLast=step>=STEPS.length-1;
+  const canNext=!busy&&!isLast;
+  const atPaint=STEPS[step]&&STEPS[step].label==="选色喷漆"&&showPicker;
+  const arcPath=(cx,cy,r,s,e)=>{const sr=s*Math.PI/180,er=e*Math.PI/180;return"M "+(cx+r*Math.cos(sr))+" "+(cy+r*Math.sin(sr))+" A "+r+" "+r+" 0 "+((e-s)>180?1:0)+" 0 "+(cx+r*Math.cos(er))+" "+(cy+r*Math.sin(er))};
+  const h=React.createElement;
+
+  return h("div",{style:{background:"#070710",minHeight:"100vh",fontFamily:"'Segoe UI','PingFang SC',sans-serif",color:"#ddd",overflow:"hidden",display:"flex",flexDirection:"column"}},
+    h("div",{style:{background:"linear-gradient(135deg,#10101c,#16213e,#0f3460)",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"2px solid #a02520",position:"relative",flexShrink:0}},
+      h("div",{style:{fontSize:16,fontWeight:900,color:"#e74c3c",letterSpacing:2,fontFamily:"monospace"}},"CHINA",h("span",{style:{color:"#f39c12"}},"CNU")," STEEL"),
+      h("div",{style:{fontSize:12,fontWeight:700,color:"#99a",letterSpacing:4}},"重 型 封 闭 钢 芯 辊 制 造 仿 真"),
+      h("div",{style:{position:"absolute",bottom:0,left:0,right:0,height:2,background:"linear-gradient(90deg,transparent,#e74c3c,#f39c12,#e74c3c,transparent)",animation:"hg 3s linear infinite"}})
+    ),
+    h("div",{style:{position:"relative",flex:1,minHeight:0,background:"radial-gradient(ellipse at 50% 100%,rgba(180,50,35,0.03) 0%,transparent 55%),linear-gradient(180deg,#0a0a12,#0e0e1a)",overflow:"hidden"}},
+      h("div",{style:{position:"absolute",bottom:0,left:0,right:0,height:"24%",perspective:800}},h("div",{style:{width:"100%",height:"100%",background:"repeating-linear-gradient(90deg,rgba(231,76,60,0.04) 0px,transparent 1px,transparent 80px),repeating-linear-gradient(0deg,rgba(231,76,60,0.04) 0px,transparent 1px,transparent 40px)",transform:"rotateX(60deg)",transformOrigin:"top center"}})),
+      flashOn&&h("div",{style:{position:"absolute",inset:0,pointerEvents:"none",background:"radial-gradient(circle at "+(sparkPos.x/12)+"% "+(sparkPos.y/6.2)+"%,rgba(255,255,200,0.3) 0%,transparent 18%)",zIndex:5}}),
+      h("div",{style:{position:"absolute",top:8,left:10,zIndex:10,background:"rgba(7,7,16,0.94)",border:"1px solid rgba(230,126,34,0.3)",padding:"8px 12px",maxWidth:360,backdropFilter:"blur(8px)",borderRadius:3}},
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:3}},
+          h("span",{style:{fontFamily:"monospace",fontSize:9,color:"#e67e22",letterSpacing:2}},step>=0?"步骤 "+(step+1)+"/"+STEPS.length:"就绪"),
+          h("span",{style:{fontFamily:"monospace",fontSize:9,padding:"1px 6px",borderRadius:2,background:"rgba(230,126,34,0.15)",color:"#f39c12"}},"封闭式钢芯辊")
+        ),
+        h("div",{style:{fontSize:13,lineHeight:1.7}},info)
+      ),
+      atPaint&&h("div",{style:{position:"absolute",top:8,right:10,zIndex:20,background:"rgba(7,7,16,0.96)",border:"1px solid rgba(231,76,60,0.4)",padding:"10px 12px",borderRadius:4,backdropFilter:"blur(10px)"}},
+        h("div",{style:{fontFamily:"monospace",fontSize:10,color:"#f39c12",letterSpacing:2,marginBottom:8}},"🎨 选择喷涂颜色"),
+        h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}},COLORS.map(function(c,i){return h("div",{key:i,onClick:function(){setPaintColor(i)},style:{width:34,height:34,borderRadius:4,background:c.hex,cursor:"pointer",border:paintColor===i?"3px solid #fff":"3px solid transparent",boxShadow:paintColor===i?"0 0 10px "+c.hex:"none",display:"flex",alignItems:"flex-end",justifyContent:"center",transition:"all .2s"}},h("span",{style:{fontSize:7,color:"#fff",textShadow:"0 1px 2px #000",marginBottom:1}},c.name))})),
+        h("div",{style:{fontSize:10,color:"#666",textAlign:"center"}},"选好后点「下一步」喷漆")
+      ),
+      h("svg",{viewBox:"0 0 1200 620",preserveAspectRatio:"xMidYMid meet",style:{position:"absolute",inset:0,width:"100%",height:"100%"}},
+        h("defs",null,
+          h("linearGradient",{id:"ppgi",x1:0,y1:0,x2:0,y2:1},h("stop",{offset:"0%",stopColor:"#2980b9"}),h("stop",{offset:"50%",stopColor:"#3498db"}),h("stop",{offset:"100%",stopColor:"#1a5276"})),
+          h("linearGradient",{id:"htR",x1:0,y1:0,x2:0,y2:1},h("stop",{offset:"0%",stopColor:"#7a7a7a"}),h("stop",{offset:"50%",stopColor:"#5c5c5c"}),h("stop",{offset:"100%",stopColor:"#424242"})),
+          h("linearGradient",{id:"htR2",x1:0,y1:1,x2:0,y2:0},h("stop",{offset:"0%",stopColor:"#7a7a7a"}),h("stop",{offset:"50%",stopColor:"#5c5c5c"}),h("stop",{offset:"100%",stopColor:"#424242"})),
+          h("radialGradient",{id:"cG",cx:".42",cy:".38",r:".58"},h("stop",{offset:"0%",stopColor:"#b0b0b0"}),h("stop",{offset:"65%",stopColor:"#6a6a6a"}),h("stop",{offset:"100%",stopColor:"#383838"})),
+          h("radialGradient",{id:"wGl",cx:".5",cy:".5",r:".5"},h("stop",{offset:"0%",stopColor:"#fff"}),h("stop",{offset:"25%",stopColor:"#ffd54f",stopOpacity:".9"}),h("stop",{offset:"100%",stopColor:"#e74c3c",stopOpacity:"0"})),
+          h("linearGradient",{id:"roG",x1:0,y1:0,x2:0,y2:1},h("stop",{offset:"0%",stopColor:"#f39c12"}),h("stop",{offset:"100%",stopColor:"#c97e0a"})),
+          h("filter",{id:"sh"},h("feDropShadow",{dx:0,dy:4,stdDeviation:3,floodColor:"#000",floodOpacity:"0.4"})),
+          h("linearGradient",{id:"pG",x1:0,y1:0,x2:0,y2:1},h("stop",{offset:"0%",stopColor:col.hi}),h("stop",{offset:"40%",stopColor:col.hex}),h("stop",{offset:"100%",stopColor:col.lo})),
+          h("radialGradient",{id:"pcG",cx:".42",cy:".38",r:".58"},h("stop",{offset:"0%",stopColor:col.hi}),h("stop",{offset:"65%",stopColor:col.cap}),h("stop",{offset:"100%",stopColor:col.lo}))
+        ),
+        // Rolling machine
+        h("g",{opacity:s1Op},
+          h("rect",{x:180,y:150,width:440,height:290,rx:5,fill:"none",stroke:"#252535",strokeWidth:2,strokeDasharray:"8,4"}),
+          h("text",{x:400,y:138,textAnchor:"middle",fontFamily:"monospace",fontSize:13,fill:"#f39c12",letterSpacing:3},"三辊卷板机"),
+          h("rect",{x:200,y:416,width:400,height:14,rx:3,fill:"#252535"}),
+          h("g",{transform:"rotate("+rollAng+",280,382)"},h("circle",{cx:280,cy:382,r:24,fill:"#4a4a55",stroke:"#3a3a44",strokeWidth:2.5}),h("line",{x1:280,y1:358,x2:280,y2:406,stroke:"#5a5a66",strokeWidth:1.5}),h("line",{x1:256,y1:382,x2:304,y2:382,stroke:"#5a5a66",strokeWidth:1.5})),
+          h("g",{transform:"rotate("+rollAng+",520,382)"},h("circle",{cx:520,cy:382,r:24,fill:"#4a4a55",stroke:"#3a3a44",strokeWidth:2.5}),h("line",{x1:520,y1:358,x2:520,y2:406,stroke:"#5a5a66",strokeWidth:1.5}),h("line",{x1:496,y1:382,x2:544,y2:382,stroke:"#5a5a66",strokeWidth:1.5})),
+          h("g",{transform:"rotate("+(-rollAng)+",400,272)"},h("circle",{cx:400,cy:272,r:28,fill:"#5a5a66",stroke:"#4a4a55",strokeWidth:2.5}),h("line",{x1:400,y1:244,x2:400,y2:300,stroke:"#6a6a77",strokeWidth:1.5}),h("line",{x1:372,y1:272,x2:428,y2:272,stroke:"#6a6a77",strokeWidth:1.5})),
+          h("rect",{x:388,y:158,width:24,height:86,rx:4,fill:"#e67e22",stroke:"#d68910",strokeWidth:1.5}),
+          plateArc>0.01?h("path",{d:arcPath(400,330,58,90,90+plateArc*360),fill:"none",stroke:"#999",strokeWidth:6,strokeLinecap:"round"}):h("rect",{x:210,y:350,width:380,height:6,rx:1,fill:"#888"}),
+          h("text",{x:400,y:468,textAnchor:"middle",fontFamily:"monospace",fontSize:11,fill:"#999"},rollLabel),
+          h("g",{transform:"translate(720,210)"},
+            h("text",{x:75,y:-8,textAnchor:"middle",fontFamily:"monospace",fontSize:10,fill:"#555"},"截面预览"),
+            h("circle",{cx:75,cy:70,r:55,fill:"none",stroke:"#666",strokeWidth:5,opacity:".4"}),
+            h("circle",{cx:75,cy:70,r:36,fill:"none",stroke:"#3498db",strokeWidth:3,opacity:".5"}),
+            h("text",{x:75,y:143,textAnchor:"middle",fontFamily:"monospace",fontSize:8,fill:"#666"},"端盖 Ø1.5m（外圈）"),
+            h("text",{x:75,y:155,textAnchor:"middle",fontFamily:"monospace",fontSize:8,fill:"#3498db"},"钢卷 Ø1.0m（内圈）"),
+            h("text",{x:75,y:167,textAnchor:"middle",fontFamily:"monospace",fontSize:8,fill:"#e67e22"},"全封闭焊死")
+          )
+        ),
+        // Assembly
+        h("g",{opacity:s2Op},
+          h("rect",{x:320,y:CY+capR+15,width:480,height:8,rx:2,fill:"#2c3e50"}),
+          h("rect",{x:320,y:CY+capR+23,width:480,height:20,rx:2,fill:"#1a252f"}),
+          h("g",{opacity:craneOp,transform:"translate(0,"+craneY+")"},
+            h("rect",{x:240,y:48,width:640,height:6,rx:2,fill:"#4a4a55"}),
+            h("rect",{x:CX-36,y:42,width:72,height:13,rx:3,fill:"#e67e22",stroke:"#d68910",strokeWidth:1.5}),
+            h("line",{x1:CX-20,y1:55,x2:CX-20,y2:140,stroke:"#7f8c8d",strokeWidth:1.5}),
+            h("line",{x1:CX+20,y1:55,x2:CX+20,y2:140,stroke:"#7f8c8d",strokeWidth:1.5}),
+            h("rect",{x:CX-24,y:138,width:48,height:8,rx:2,fill:"#f39c12"}),
+            h("path",{d:"M"+(CX-7)+",146 Q"+(CX-7)+",157 "+CX+",157 Q"+(CX+7)+",157 "+(CX+7)+",146",fill:"none",stroke:"#f39c12",strokeWidth:2.5,strokeLinecap:"round"})
+          ),
+          h("g",{filter:"url(#sh)"},
+            h("g",{opacity:lCapOp,transform:"translate("+lCapX+",0)"},
+              h("ellipse",{cx:LL,cy:CY,rx:capW,ry:capR,fill:"url(#cG)",stroke:"#888",strokeWidth:1.5}),
+              h("ellipse",{cx:LL,cy:CY,rx:5,ry:18,fill:"#444",stroke:"#555",strokeWidth:1}),
+              bolts.map(function(o,i){return h("circle",{key:i,cx:LL,cy:CY+o,r:2,fill:"#333",stroke:"#666",strokeWidth:".6"})})
+            ),
+            h("g",{opacity:coilOp,transform:"translate(0,"+coilY+")"},
+              h("rect",{x:LL+capW+2,y:CY-coilR,width:bodyW-capW*2-4,height:coilR*2,rx:3,fill:"url(#ppgi)",stroke:"#1a5276",strokeWidth:1.5}),
+              [0,1,2,3].map(function(i){return h("line",{key:i,x1:LL+capW+22+i*42,y1:CY-coilR,x2:LL+capW+22+i*42,y2:CY+coilR,stroke:"rgba(255,255,255,0.06)",strokeWidth:1})}),
+              h("rect",{x:LL+capW+2,y:CY-10,width:bodyW-capW*2-4,height:20,fill:"rgba(0,0,0,0.2)",rx:2}),
+              h("text",{x:CX,y:CY+3,textAnchor:"middle",fontFamily:"monospace",fontSize:9,fill:"#bcd",letterSpacing:1},"PPGI Ø1.0m"),
+              h("rect",{x:LL+capW+2,y:CY-capR,width:bodyW-capW*2-4,height:capR-coilR,fill:"rgba(20,20,35,0.6)",rx:1}),
+              h("rect",{x:LL+capW+2,y:CY+coilR,width:bodyW-capW*2-4,height:capR-coilR,fill:"rgba(20,20,35,0.6)",rx:1})
+            ),
+            h("g",{opacity:topShOp,transform:"translate(0,"+topShY+")"},
+              h("rect",{x:LL+capW,y:CY-coilR,width:bodyW-capW*2,height:coilR,rx:2,fill:"url(#htR)",stroke:"#666",strokeWidth:1.5}),
+              h("line",{x1:LL+capW,y1:CY,x2:RR-capW,y2:CY,stroke:"#888",strokeWidth:1}),
+              topShY<-5&&h("text",{x:CX,y:CY-coilR-8,textAnchor:"middle",fontFamily:"monospace",fontSize:8,fill:"#f39c12"},"↓ 上半壳")
+            ),
+            h("g",{opacity:btmShOp,transform:"translate(0,"+btmShY+")"},
+              h("rect",{x:LL+capW,y:CY,width:bodyW-capW*2,height:coilR,rx:2,fill:"url(#htR2)",stroke:"#666",strokeWidth:1.5}),
+              h("line",{x1:LL+capW,y1:CY,x2:RR-capW,y2:CY,stroke:"#888",strokeWidth:1}),
+              btmShY>5&&h("text",{x:CX,y:CY+coilR+16,textAnchor:"middle",fontFamily:"monospace",fontSize:8,fill:"#f39c12"},"↑ 下半壳")
+            ),
+            h("g",{opacity:seamOp},
+              h("line",{x1:LL+capW,y1:CY-coilR,x2:RR-capW,y2:CY-coilR,stroke:"#f39c12",strokeWidth:2,strokeDasharray:"3,3"}),
+              h("line",{x1:LL+capW,y1:CY+coilR,x2:RR-capW,y2:CY+coilR,stroke:"#f39c12",strokeWidth:2,strokeDasharray:"3,3"})
+            ),
+            h("g",{opacity:rCapOp,transform:"translate("+rCapX+",0)"},
+              h("ellipse",{cx:RR,cy:CY,rx:capW,ry:capR,fill:"url(#cG)",stroke:"#888",strokeWidth:1.5}),
+              h("ellipse",{cx:RR,cy:CY,rx:5,ry:18,fill:"#444",stroke:"#555",strokeWidth:1}),
+              bolts.map(function(o,i){return h("circle",{key:i,cx:RR,cy:CY+o,r:2,fill:"#333",stroke:"#666",strokeWidth:".6"})})
+            ),
+            h("g",{opacity:capWeldOp},
+              h("line",{x1:LL+capW,y1:CY-capR+5,x2:LL+capW,y2:CY+capR-5,stroke:"#f39c12",strokeWidth:2,strokeDasharray:"3,3",opacity:".5"}),
+              h("line",{x1:RR-capW,y1:CY-capR+5,x2:RR-capW,y2:CY+capR-5,stroke:"#f39c12",strokeWidth:2,strokeDasharray:"3,3",opacity:".5"})
+            ),
+            h("g",{opacity:sparkOp},
+              h("circle",{cx:sparkPos.x,cy:sparkPos.y,r:14,fill:"url(#wGl)"}),
+              h("circle",{cx:sparkPos.x,cy:sparkPos.y,r:4,fill:"#fff"}),
+              [0,1,2,3,4].map(function(i){var a=(i*72+sparkPos.y*2)*Math.PI/180;return h("circle",{key:i,cx:sparkPos.x+Math.cos(a)*18,cy:sparkPos.y+Math.sin(a)*18,r:1.2,fill:"#ffd54f",opacity:".4"})})
+            ),
+            h("g",{opacity:paintOp},
+              h("rect",{x:LL+capW,y:CY-coilR,width:bodyW-capW*2,height:coilR*2,rx:2,fill:"url(#pG)",stroke:col.lo,strokeWidth:1.5}),
+              h("ellipse",{cx:LL,cy:CY,rx:capW,ry:capR,fill:"url(#pcG)",stroke:col.lo,strokeWidth:1.5}),
+              h("ellipse",{cx:RR,cy:CY,rx:capW,ry:capR,fill:"url(#pcG)",stroke:col.lo,strokeWidth:1.5}),
+              h("rect",{x:LL+capW,y:CY-capR,width:bodyW-capW*2,height:capR-coilR,fill:col.lo,opacity:".25",rx:1}),
+              h("rect",{x:LL+capW,y:CY+coilR,width:bodyW-capW*2,height:capR-coilR,fill:col.lo,opacity:".25",rx:1}),
+              h("rect",{x:LL+capW+5,y:CY-coilR+8,width:28,height:coilR*2-16,rx:3,fill:"rgba(255,255,255,0.05)"}),
+              h("text",{x:CX,y:CY-6,textAnchor:"middle",fontFamily:"monospace",fontSize:13,fill:"rgba(255,255,255,0.8)",letterSpacing:3,fontWeight:900},"CNU SOLID"),
+              h("text",{x:CX,y:CY+12,textAnchor:"middle",fontSize:9,fill:"rgba(255,255,255,0.45)",letterSpacing:1},"重型封闭钢芯辊")
+            )
+          ),
+          h("g",{opacity:robotOp,transform:"translate(860,148)"},
+            h("rect",{x:-8,y:218,width:70,height:14,rx:3,fill:"#c97e0a",stroke:"#a86900",strokeWidth:1.5}),
+            h("rect",{x:6,y:204,width:38,height:15,rx:3,fill:"#f39c12",stroke:"#d68910",strokeWidth:1.5}),
+            h("rect",{x:12,y:118,width:26,height:88,rx:3,fill:"url(#roG)",stroke:"#a86900",strokeWidth:1.5}),
+            h("circle",{cx:25,cy:204,r:7,fill:"#e67e22",stroke:"#d68910",strokeWidth:1.5}),
+            h("g",{transform:"rotate("+armRot+",25,116)"},
+              h("rect",{x:13,y:22,width:24,height:96,rx:3,fill:"#f39c12",stroke:"#d68910",strokeWidth:1.5}),
+              h("circle",{cx:25,cy:116,r:6,fill:"#e67e22",stroke:"#d68910",strokeWidth:1.5}),
+              h("circle",{cx:25,cy:22,r:4.5,fill:"#e67e22",stroke:"#d68910",strokeWidth:1}),
+              h("rect",{x:19,y:4,width:12,height:18,rx:2,fill:"#7f8c8d"}),
+              h("circle",{cx:25,cy:2,r:2.5,fill:"#ddd"})
+            )
+          ),
+          h("g",{opacity:sprayerOp},
+            h("rect",{x:230,y:230,width:20,height:52,rx:2,fill:col.hex,stroke:col.lo,strokeWidth:1.5}),
+            h("rect",{x:227,y:224,width:26,height:9,rx:2,fill:col.cap}),
+            h("rect",{x:250,y:250,width:26,height:4,rx:2,fill:col.lo}),
+            h("polygon",{points:"276,248 294,244 294,260 276,257",fill:col.lo,opacity:".8"}),
+            sprayOn&&[{cx:304,cy:252,r:2.5},{cx:316,cy:246,r:2},{cx:318,cy:258,r:2},{cx:330,cy:250,r:1.5},{cx:340,cy:256,r:1.2}].map(function(s,i){return h("circle",{key:i,cx:s.cx,cy:s.cy,r:s.r,fill:col.hex,opacity:.5-i*.08})})
+          ),
+          h("g",{opacity:dimOp},
+            h("line",{x1:LL,y1:CY+capR+30,x2:RR,y2:CY+capR+30,stroke:"#e74c3c",strokeWidth:1}),
+            h("line",{x1:LL,y1:CY+capR+24,x2:LL,y2:CY+capR+36,stroke:"#e74c3c",strokeWidth:1}),
+            h("line",{x1:RR,y1:CY+capR+24,x2:RR,y2:CY+capR+36,stroke:"#e74c3c",strokeWidth:1}),
+            h("text",{x:CX,y:CY+capR+46,textAnchor:"middle",fontFamily:"monospace",fontSize:10,fill:"#e74c3c",fontWeight:700},"长 1000mm"),
+            h("line",{x1:RR+28,y1:CY-capR,x2:RR+28,y2:CY+capR,stroke:"#e74c3c",strokeWidth:1}),
+            h("line",{x1:RR+22,y1:CY-capR,x2:RR+34,y2:CY-capR,stroke:"#e74c3c",strokeWidth:1}),
+            h("line",{x1:RR+22,y1:CY+capR,x2:RR+34,y2:CY+capR,stroke:"#e74c3c",strokeWidth:1}),
+            h("text",{x:RR+44,y:CY-4,fontFamily:"monospace",fontSize:10,fill:"#e74c3c",fontWeight:700},"Ø 1500mm"),
+            h("line",{x1:RR+56,y1:CY-coilR,x2:RR+56,y2:CY+coilR,stroke:"#3498db",strokeWidth:1}),
+            h("line",{x1:RR+50,y1:CY-coilR,x2:RR+62,y2:CY-coilR,stroke:"#3498db",strokeWidth:1}),
+            h("line",{x1:RR+50,y1:CY+coilR,x2:RR+62,y2:CY+coilR,stroke:"#3498db",strokeWidth:1}),
+            h("text",{x:RR+72,y:CY,fontFamily:"monospace",fontSize:9,fill:"#3498db"},"Ø 1000mm")
+          )
+        )
+      )
+    ),
+    h("div",{style:{background:"linear-gradient(180deg,#0c0c18,#070710)",padding:"8px 14px",display:"flex",alignItems:"center",gap:8,borderTop:"1px solid rgba(231,76,60,0.2)",flexWrap:"wrap",flexShrink:0}},
+      h("button",{onClick:nextStep,disabled:!canNext&&!atPaint,style:{fontFamily:"monospace",fontSize:11,fontWeight:700,padding:"7px 18px",border:"2px solid "+(canNext||atPaint?"#e67e22":"#333"),background:busy?"#e67e22":"transparent",color:busy?"#fff":(canNext||atPaint?"#e67e22":"#444"),cursor:canNext||atPaint?"pointer":"default",letterSpacing:1,transition:"all .2s",minWidth:160}},
+        step<0?"▶ 开始":busy?"执行中...":atPaint?"喷漆 ("+col.name+")":isLast?"✅ 已完成":"下一步 → "+(STEPS[step+1]?STEPS[step+1].label:"")
+      ),
+      h("button",{onClick:fullReset,style:{fontFamily:"monospace",fontSize:10,fontWeight:700,padding:"7px 16px",border:"2px solid #444",background:"transparent",color:"#666",cursor:"pointer",letterSpacing:1}},"↺ 重置"),
+      h("div",{style:{display:"flex",gap:3,marginLeft:"auto",alignItems:"center",flexWrap:"wrap"}},
+        STEPS.map(function(s,i){return h("div",{key:i,style:{display:"flex",alignItems:"center",gap:2}},
+          h("div",{style:{width:6,height:6,borderRadius:"50%",border:"1.5px solid "+(i<step?"#27ae60":i===step?"#e74c3c":"#2a2a35"),background:i<step?"#27ae60":i===step?"#e74c3c":"transparent",boxShadow:i===step?"0 0 5px rgba(231,76,60,0.5)":"none",transition:"all .3s"}}),
+          h("span",{style:{fontFamily:"monospace",fontSize:7,color:i===step?"#e74c3c":"#3a3a45"}},s.label)
+        )})
+      )
+    )
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
